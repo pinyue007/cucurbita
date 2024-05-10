@@ -56,6 +56,12 @@ type Websocket struct {
 	mutex  sync.Mutex
 }
 
+func (ws *Websocket) UpdateReadDeadline() error {
+	ws.mutex.Lock()
+	defer ws.mutex.Unlock()
+	return ws.conn.SetReadDeadline((time.Now().Add(30 * time.Second)))
+}
+
 func (ws *Websocket) WriteMessage(buffer []byte) error {
 	ws.mutex.Lock()
 	defer ws.mutex.Unlock()
