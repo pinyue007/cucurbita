@@ -55,9 +55,13 @@ func handleWebsocket(c *gin.Context) {
 	conn.SetPingHandler(func(buffer string) error { return handlePingMessage(ws, domain, buffer) })
 
 	for {
-		_, buffer, err := conn.ReadMessage()
+		ws.UpdateReadDeadline()
+		messageType, buffer, err := conn.ReadMessage()
 		if err != nil {
 			break
+		}
+		if messageType != websocket.BinaryMessage {
+			continue
 		}
 		if ws.banned {
 			continue
@@ -105,7 +109,8 @@ func handleWebsocket(c *gin.Context) {
 }
 
 func handlePingMessage(ws *Websocket, domain *Domain, buffer string) error {
-	errVersionTooLow := errors.New("client needs to be updated")
+	ws.UpdateReadDeadline()
+
 	err := func() error {
 		info := strings.Split(buffer, "::")
 		if len(info) < 3 || info[0] != "candy" {
@@ -120,7 +125,7 @@ func handlePingMessage(ws *Websocket, domain *Domain, buffer string) error {
 			return err
 		}
 		if !constraints.Check(clientVersion) {
-			return errVersionTooLow
+			return errors.New("client needs to be updated")
 		}
 
 		domain.mutex.RLock()
