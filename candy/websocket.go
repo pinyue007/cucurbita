@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/lanthora/cucurbita/logger"
 	"github.com/lanthora/cucurbita/storage"
 	"github.com/lunixbochs/struc"
+	"gorm.io/gorm"
 )
 
 func init() {
@@ -171,12 +173,16 @@ func handleAuthMessage(ws *Websocket, domain *Domain, buffer []byte) error {
 		return errors.New("auth address does not match network configuration")
 	}
 
+	if !checkIpConflict(domain, uint32ToIpString(message.IP), device.VMac) {
+		return fmt.Errorf("auth failed: ip conflict: %v", uint32ToIpString(message.IP))
+	}
+
 	for oldWs, oldDevice := range domain.wsDeviceMap {
 		if oldWs == ws {
 			continue
 		}
 
-		if oldDevice.VMac == device.VMac || oldDevice.ip == message.IP {
+		if oldDevice.VMac == device.VMac {
 			device.RX = oldDevice.RX
 			device.TX = oldDevice.TX
 			oldDevice.Online = false
@@ -459,4 +465,17 @@ func uint32ToIpString(ip uint32) string {
 	var buffer []byte = make([]byte, 4)
 	binary.BigEndian.PutUint32(buffer, ip)
 	return net.IP(buffer).String()
+}
+
+func checkIpConflict(domain *Domain, ip, vmac string) bool {
+	device := &Device{Domain: domain.Name, IP: ip}
+	result := storage.Where(device).Take(device)
+	if result.Error == gorm.ErrRecordNotFound {
+		return true
+	}
+	if result.Error == nil && device.VMac == vmac {
+		return true
+	}
+
+	return false
 }
